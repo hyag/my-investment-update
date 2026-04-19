@@ -116,6 +116,7 @@ def generate_entry(market_summary):
         f"{market_block}\n\n"
         "以下の形式だけで出力してください。余計な説明は不要です。\n\n"
         "TITLE: （記事の内容を表す3〜10文字。日記っぽいキャッチーな一言。例：『ドル円、粘るなぁ』『週明け様子見』）\n"
+        "TAGS: （投資家向けBlueskyフィードに乗りやすい日本語ハッシュタグを3〜5個。例：#投資 #米国株 #日経平均 #ドル円 #相場日記）\n"
         "BODY:\n（150字前後の本文。見出し・箇条書きなし。メモ帳に書いた独り言のような文体で）"
     )
     msg = client.messages.create(
@@ -126,14 +127,16 @@ def generate_entry(market_summary):
     )
     text = msg.content[0].text.strip()
 
-    title, body = "今日のメモ", text
+    title, body, tags = "今日のメモ", text, ""
     for line in text.splitlines():
         if line.startswith("TITLE:"):
             title = line.removeprefix("TITLE:").strip()
+        elif line.startswith("TAGS:"):
+            tags = line.removeprefix("TAGS:").strip()
         elif line.startswith("BODY:"):
             body = text[text.index("BODY:") + len("BODY:"):].strip()
             break
-    return title, body
+    return title, body, tags
 
 
 # ── index.md 生成 ───────────────────────────────────────
@@ -242,7 +245,7 @@ def post_to_x(title, body):
 
 # ── Bluesky 投稿 ────────────────────────────────────────
 
-def post_to_bluesky(title, body):
+def post_to_bluesky(title, body, tags=""):
     if not all(os.environ.get(k) for k in ["BSKY_HANDLE", "BSKY_APP_PASSWORD"]):
         print("Bluesky credentials not set — skipping.")
         return
@@ -264,12 +267,35 @@ def post_to_bluesky(title, body):
                       {"identifier": handle, "password": password})
         token = session["accessJwt"]
 
-        max_body = 300 - len(title) - len(SITE_URL) - 4
+        tags_str = f"\n{tags}" if tags else ""
+        max_body = 300 - len(title) - len(SITE_URL) - len(tags_str) - 6
         preview = body[:max_body].rstrip() + ("…" if len(body) > max_body else "")
-        text = f"{title}\n\n{preview}\n\n{SITE_URL}"
+        text = f"{title}\n\n{preview}\n\n{SITE_URL}{tags_str}"
 
+        # facets: URLとハッシュタグをリンク化
+        facets = []
         url_start = len(f"{title}\n\n{preview}\n\n".encode("utf-8"))
         url_end = url_start + len(SITE_URL.encode("utf-8"))
+        facets.append({
+            "index": {"byteStart": url_start, "byteEnd": url_end},
+            "features": [{"$type": "app.bsky.richtext.facet#link", "uri": SITE_URL}],
+        })
+        # ハッシュタグのfacet
+        if tags:
+            offset = 0
+            text_bytes = text.encode("utf-8")
+            for tag in tags.split():
+                if not tag.startswith("#"):
+                    continue
+                tag_bytes = tag.encode("utf-8")
+                pos = text_bytes.find(tag_bytes, offset)
+                if pos != -1:
+                    facets.append({
+                        "index": {"byteStart": pos, "byteEnd": pos + len(tag_bytes)},
+                        "features": [{"$type": "app.bsky.richtext.facet#tag",
+                                      "tag": tag[1:]}],
+                    })
+                    offset = pos + len(tag_bytes)
 
         req = urllib.request.Request(
             "https://bsky.social/xrpc/com.atproto.repo.createRecord",
@@ -279,10 +305,7 @@ def post_to_bluesky(title, body):
                 "record": {
                     "$type": "app.bsky.feed.post",
                     "text": text,
-                    "facets": [{
-                        "index": {"byteStart": url_start, "byteEnd": url_end},
-                        "features": [{"$type": "app.bsky.richtext.facet#link", "uri": SITE_URL}],
-                    }],
+                    "facets": facets,
                     "createdAt": datetime.now(JST).isoformat(),
                 },
             }).encode(),
@@ -301,11 +324,12 @@ def post_to_bluesky(title, body):
 if __name__ == "__main__":
     data = get_market_data()
     summary = format_market_summary(data)
-    title, body = generate_entry(summary)
+    title, body, tags = generate_entry(summary)
     write_index(data, title, body)
     update_rss(title, body)
     post_to_x(title, body)
-    post_to_bluesky(title, body)
+    post_to_bluesky(title, body, tags)
     print(summary)
     print(f"\nTitle: {title}")
+    print(f"Tags: {tags}")
     print(f"Body:\n{body}")
