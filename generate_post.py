@@ -87,13 +87,16 @@ def format_market_lines(data):
 def write_index(data, title, body):
     today = datetime.now().strftime("%Y.%m.%d")
     market_lines = format_market_lines(data)
-    content = f"""# {title}
+    content = f"""---
+layout: default
+title: "{title}"
+---
 
-*{today}*
+# {title}
 
-```
-{market_lines}
-```
+<p class="date">{today}</p>
+
+<p class="market">{market_lines.replace(chr(10), '<br>')}</p>
 
 {body}
 """

@@ -3,7 +3,6 @@
 
 @import "{{ site.theme }}";
 
-/* ベース */
 body {
   font-family: 'Noto Serif JP', 'Georgia', serif;
   background: #f7f6f3;
@@ -12,60 +11,68 @@ body {
   font-size: 1rem;
 }
 
-/* コンテンツ幅を狭く・余白を広く */
 .wrapper {
-  max-width: 40ch;
+  max-width: 38ch;
   padding: 5rem 1.5rem;
   margin: 0 auto;
 }
 
-/* サイトヘッダー・ナビ・フッターを非表示 */
 .site-header,
 .site-footer,
 .site-nav {
   display: none;
 }
 
-/* タイトル */
+/* タイトル：大きく・1回だけ */
 h1 {
-  font-size: 1.45rem;
+  font-size: 1.5rem;
   font-weight: 500;
-  letter-spacing: 0.08em;
-  line-height: 1.6;
-  margin-bottom: 0.6rem;
+  letter-spacing: 0.06em;
+  line-height: 1.5;
+  margin-bottom: 1.8rem;
   border: none;
 }
 
-/* 日付・数字ブロック */
 h2, h3 { display: none; }
 
 /* 本文 */
 p {
-  margin: 1.8rem 0;
-  text-align: justify;
-  letter-spacing: 0.04em;
+  margin: 1.6rem 0;
+  letter-spacing: 0.03em;
+  text-align: left;
 }
 
-/* 市場データ（コードブロック風） */
+/* 日付 */
+p.date {
+  color: #aaa;
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  margin-bottom: 0.5rem;
+}
+
+/* 市場データ */
+p.market {
+  font-size: 0.82rem;
+  color: #999;
+  letter-spacing: 0.01em;
+  line-height: 2;
+  margin-bottom: 2rem;
+}
+
+hr { display: none; }
+
+em {
+  font-style: normal;
+  color: #aaa;
+  font-size: 0.8rem;
+}
+
 pre, code {
   font-family: 'Noto Serif JP', serif;
   background: none;
   border: none;
   font-size: 0.82rem;
-  color: #888;
+  color: #999;
   padding: 0;
-  line-height: 2;
-}
-
-/* 区切り線を消す */
-hr {
-  display: none;
-}
-
-/* 日付などの薄いテキスト */
-em {
-  font-style: normal;
-  color: #aaa;
-  font-size: 0.8rem;
-  letter-spacing: 0.06em;
+  letter-spacing: 0;
 }
