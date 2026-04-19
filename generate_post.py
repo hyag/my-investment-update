@@ -53,17 +53,52 @@ def format_market_summary(data):
     return "\n".join(lines)
 
 
+def get_weekend_news():
+    now = datetime.now(JST)
+    two_days_ago = now - timedelta(days=2)
+    cutoff = int(two_days_ago.timestamp())
+
+    headlines = []
+    for symbol in ["^GSPC", "^NDX", "JPY=X"]:
+        try:
+            items = yf.Ticker(symbol).news or []
+            for item in items:
+                pub = item.get("providerPublishTime", 0)
+                title = (item.get("content") or {}).get("title") or item.get("title", "")
+                if pub >= cutoff and title:
+                    headlines.append(title)
+        except Exception:
+            pass
+
+    seen, unique = set(), []
+    for h in headlines:
+        if h not in seen:
+            seen.add(h)
+            unique.append(h)
+    return unique[:5]
+
+
 def generate_entry(market_summary):
     client = anthropic.Anthropic()
     weekday = datetime.now(JST).weekday()  # 0=月曜
+
     if weekday == 0:
-        timing_note = "今日は月曜日。先週末（金曜）の終値データをもとに、週明けの相場を前にした朝の一言を書く。「週末はどうだったかな」「さて今週はどうなるか」のような週明けならではのニュアンスで。"
+        news = get_weekend_news()
+        news_section = (
+            "【週末のニュース見出し】\n" + "\n".join(f"・{h}" for h in news)
+            if news else ""
+        )
+        timing_note = (
+            "今日は月曜日。先週末（金曜）の終値と、もし週末ニュースがあればそれも踏まえて、"
+            "週明けの相場を前にした朝の一言を書く。「さて今週はどうなるか」のような週明けならではのニュアンスで。"
+        )
+        market_block = f"市場終値データ：\n{market_summary}\n\n{news_section}\n\n{timing_note}"
     else:
         timing_note = "昨日の市場終値を見ながら、今日の相場を前に感じたことを書く朝の一言。"
+        market_block = f"市場終値データ：\n{market_summary}\n\n{timing_note}"
 
     prompt = (
-        f"市場終値データ：\n{market_summary}\n\n"
-        f"{timing_note}\n\n"
+        f"{market_block}\n\n"
         "以下の形式だけで出力してください。余計な説明は不要です。\n\n"
         "TITLE: （記事の内容を表す3〜10文字。日記っぽいキャッチーな一言。例：『ドル円、粘るなぁ』『週明け様子見』）\n"
         "BODY:\n（150字前後の本文。見出し・箇条書きなし。メモ帳に書いた独り言のような文体で）"
