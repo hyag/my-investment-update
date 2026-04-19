@@ -2,7 +2,7 @@ name: Daily Investment Update
 
 on:
   schedule:
-    - cron: "0 23 * * *"  # UTC 23:00 = JST 08:00
+    - cron: "0 23 * * 1-5"  # UTC 23:00 = JST 08:00（平日のみ）
   workflow_dispatch:        # 手動実行も可能
 
 concurrency:
