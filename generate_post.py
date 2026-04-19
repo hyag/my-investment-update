@@ -55,10 +55,17 @@ def format_market_summary(data):
 
 def generate_entry(market_summary):
     client = anthropic.Anthropic()
+    weekday = datetime.now(JST).weekday()  # 0=月曜
+    if weekday == 0:
+        timing_note = "今日は月曜日。先週末（金曜）の終値データをもとに、週明けの相場を前にした朝の一言を書く。「週末はどうだったかな」「さて今週はどうなるか」のような週明けならではのニュアンスで。"
+    else:
+        timing_note = "昨日の市場終値を見ながら、今日の相場を前に感じたことを書く朝の一言。"
+
     prompt = (
-        f"昨日の市場終値データ：\n{market_summary}\n\n"
+        f"市場終値データ：\n{market_summary}\n\n"
+        f"{timing_note}\n\n"
         "以下の形式だけで出力してください。余計な説明は不要です。\n\n"
-        "TITLE: （記事の内容を表す3〜10文字。日記っぽいキャッチーな一言。例：『ドル円、粘るなぁ』『日経がんばれ』）\n"
+        "TITLE: （記事の内容を表す3〜10文字。日記っぽいキャッチーな一言。例：『ドル円、粘るなぁ』『週明け様子見』）\n"
         "BODY:\n（150字前後の本文。見出し・箇条書きなし。メモ帳に書いた独り言のような文体で）"
     )
     msg = client.messages.create(
