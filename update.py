@@ -49,25 +49,33 @@ SYSTEM_PROMPT = """# キャラクター設定
 4. 軽い締め（「おやすみなさい」「明日も良い日でありますように」など）"""
 
 
-def generate_advice(market_summary):
+def generate_entry(market_summary):
     client = anthropic.Anthropic()
     prompt = (
         f"今日の市場データ：\n{market_summary}\n\n"
-        "このデータをもとに「今日の一言」を書いてください。\n"
-        "・150〜200字程度\n"
-        "・見出しや箇条書きは使わず、読み物として成立する文章で\n"
-        "・本文テキストのみ出力する（前置きや説明は不要）"
+        "以下の形式で出力してください。\n\n"
+        "TITLE: （本文の内容を表す3〜10文字の日記風タイトル）\n"
+        "BODY:\n（本文を150〜200字で。見出し・箇条書き・絵文字は使わない）"
     )
     msg = client.messages.create(
         model="claude-sonnet-4-6",
-        max_tokens=500,
+        max_tokens=600,
         system=SYSTEM_PROMPT,
         messages=[{"role": "user", "content": prompt}],
     )
-    return msg.content[0].text.strip()
+    text = msg.content[0].text.strip()
+
+    title, body = "今日のつぶやき", text
+    for line in text.splitlines():
+        if line.startswith("TITLE:"):
+            title = line.removeprefix("TITLE:").strip()
+        elif line.startswith("BODY:"):
+            body = text[text.index("BODY:") + len("BODY:"):].strip()
+            break
+    return title, body
 
 
-def write_index(data, advice):
+def write_index(data, title, body):
     today = datetime.now().strftime("%Y年%m月%d日")
 
     def row(name, v):
@@ -75,22 +83,22 @@ def write_index(data, advice):
         return f"| {name} | {v['price']:,.2f} | {sign}{v['pct']:.2f}% |"
 
     table_rows = "\n".join(row(n, v) for n, v in data.items())
-    content = f"""# 今日の投資初心者向け一言
+    content = f"""# {title}
 
-**更新日:** {today}
+**{today}**
 
-## 📊 今日の市場
+## 今日の市場
 
 | 指標 | 価格 | 前日比 |
 |------|------|--------|
 {table_rows}
 
-## 💡 今日の一言
+## つぶやき
 
-{advice}
+{body}
 
 ---
-*このサイトは GitHub Actions + Claude API で毎朝自動更新されます。*
+*毎朝 GitHub Actions + Claude API で自動更新されます。*
 """
     os.makedirs("docs", exist_ok=True)
     with open("docs/index.md", "w", encoding="utf-8") as f:
@@ -100,7 +108,8 @@ def write_index(data, advice):
 if __name__ == "__main__":
     data = get_market_data()
     summary = format_market_summary(data)
-    advice = generate_advice(summary)
-    write_index(data, advice)
+    title, body = generate_entry(summary)
+    write_index(data, title, body)
     print(summary)
-    print(f"\nAdvice: {advice}")
+    print(f"\nTitle: {title}")
+    print(f"Body: {body}")
