@@ -233,8 +233,11 @@ def post_to_x(title, body):
     max_body = 280 - len(title) - url_len - 4  # 改行×2 + 余裕
     preview = body[:max_body].rstrip() + ("…" if len(body) > max_body else "")
     tweet = f"{title}\n\n{preview}\n\n{SITE_URL}"
-    client.create_tweet(text=tweet)
-    print("Posted to X.")
+    try:
+        client.create_tweet(text=tweet)
+        print("Posted to X.")
+    except Exception as e:
+        print(f"X post skipped: {e}")
 
 
 # ── メイン ──────────────────────────────────────────────
