@@ -39,7 +39,7 @@ SYSTEM_PROMPT = """# キャラクター設定
 ・「結論として」「要約」「注目すべき」は一切禁止
 ・文末は「〜ですね」「〜かな」「〜な気がする」「〜だなあ」を自然に織り交ぜる
 ・「正直、こうなるとは思わなかった」といった素直な反応を入れる
-・絵文字は使わない
+・絵文字は1〜2個だけ使ってよい。文末や感情を表す場面に自然に添える程度（多用しない）
 ・英語を日本語に訳したような硬い表現・語順は避ける
 ・「しかしながら」「一方で」「したがって」のような書き言葉的接続詞は使わない
 ・「〜している」より「〜してる」、「〜ている」より「〜てる」など、話し言葉に近い表記を使う
@@ -92,22 +92,29 @@ def write_index(data, title, body):
         return f"| {name} | {v['price']:,.2f} | {sign}{v['pct']:.2f}% |"
 
     table_rows = "\n".join(row(n, v) for n, v in data.items())
-    content = f"""# {title}
+    content = f"""# 📓 相場日記
 
-**{today}**
+## {title}
 
-## 今日の市場
+*{today}*
+
+---
+
+### 📈 今日の数字
 
 | 指標 | 価格 | 前日比 |
 |------|------|--------|
 {table_rows}
 
-## つぶやき
+---
+
+### 💬 ひとこと
 
 {body}
 
 ---
-*毎朝 GitHub Actions + Claude API で自動更新されます。*
+
+*毎朝 8:00（JST）に自動更新しています。*
 """
     os.makedirs("docs", exist_ok=True)
     with open("docs/index.md", "w", encoding="utf-8") as f:

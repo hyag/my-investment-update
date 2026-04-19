@@ -1,3 +1,5 @@
 theme: minima
-title: 今日の投資一言
-description: Claude API が毎朝生成する投資初心者向けの市場解説
+title: 相場日記
+description: 個人投資家の毎朝のつぶやき。市場データと感想を気ままに。
+minima:
+  skin: dark
