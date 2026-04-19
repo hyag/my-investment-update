@@ -135,8 +135,6 @@ def format_market_lines(data):
 def write_index(data, title, body):
     now = datetime.now(JST)
     today = now.strftime("%Y.%m.%d")
-    days_back = 3 if now.weekday() == 0 else 1
-    prev_date = (now - timedelta(days=days_back)).strftime("%m/%d")
     market_lines = format_market_lines(data)
     content = f"""---
 layout: default
@@ -144,7 +142,7 @@ layout: default
 
 # {title}
 
-<p class="date">{today} 配信 ／ {prev_date} 終値</p>
+<p class="date">{today}　8:00配信</p>
 
 <p class="market">{market_lines.replace(chr(10), '<br>')}</p>
 
