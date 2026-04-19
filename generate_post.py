@@ -1,7 +1,13 @@
-import yfinance as yf
-import anthropic
-from datetime import datetime, timezone, timedelta
+import json
 import os
+from datetime import datetime, timezone, timedelta
+from xml.sax.saxutils import escape
+
+import anthropic
+import yfinance as yf
+
+JST = timezone(timedelta(hours=9))
+SITE_URL = "https://hyag.github.io/my-investment-update/"
 
 TICKERS = {
     "USD/JPY":   "JPY=X",
@@ -34,6 +40,8 @@ SYSTEM_PROMPT = """スマホのメモ帳を気ままに公開してる、投資�
 「本日の米ドル円は158円台で推移しました。一方、NASDAQ100は上昇傾向を示しており、注目すべき動きとなっています。」"""
 
 
+# ── 市場データ ──────────────────────────────────────────
+
 def get_market_data():
     results = {}
     for name, symbol in TICKERS.items():
@@ -53,23 +61,28 @@ def format_market_summary(data):
     return "\n".join(lines)
 
 
-def get_weekend_news():
-    now = datetime.now(JST)
-    two_days_ago = now - timedelta(days=2)
-    cutoff = int(two_days_ago.timestamp())
+def format_market_lines(data):
+    lines = []
+    for name, v in data.items():
+        sign = "+" if v["pct"] >= 0 else ""
+        lines.append(f"{name}  {v['price']:,.2f}  前日比{sign}{v['pct']:.1f}%")
+    return "\n".join(lines)
 
+
+# ── 週末ニュース（月曜のみ） ────────────────────────────
+
+def get_weekend_news():
+    cutoff = int((datetime.now(JST) - timedelta(days=2)).timestamp())
     headlines = []
     for symbol in ["^GSPC", "^NDX", "JPY=X"]:
         try:
-            items = yf.Ticker(symbol).news or []
-            for item in items:
-                pub = item.get("providerPublishTime", 0)
-                title = (item.get("content") or {}).get("title") or item.get("title", "")
-                if pub >= cutoff and title:
-                    headlines.append(title)
+            for item in (yf.Ticker(symbol).news or []):
+                if item.get("providerPublishTime", 0) >= cutoff:
+                    title = (item.get("content") or {}).get("title") or item.get("title", "")
+                    if title:
+                        headlines.append(title)
         except Exception:
             pass
-
     seen, unique = set(), []
     for h in headlines:
         if h not in seen:
@@ -78,9 +91,11 @@ def get_weekend_news():
     return unique[:5]
 
 
+# ── Claude API ──────────────────────────────────────────
+
 def generate_entry(market_summary):
     client = anthropic.Anthropic()
-    weekday = datetime.now(JST).weekday()  # 0=月曜
+    weekday = datetime.now(JST).weekday()
 
     if weekday == 0:
         news = get_weekend_news()
@@ -121,20 +136,10 @@ def generate_entry(market_summary):
     return title, body
 
 
-JST = timezone(timedelta(hours=9))
-
-
-def format_market_lines(data):
-    lines = []
-    for name, v in data.items():
-        sign = "+" if v["pct"] >= 0 else ""
-        lines.append(f"{name}  {v['price']:,.2f}  前日比{sign}{v['pct']:.1f}%")
-    return "\n".join(lines)
-
+# ── index.md 生成 ───────────────────────────────────────
 
 def write_index(data, title, body):
-    now = datetime.now(JST)
-    today = now.strftime("%Y.%m.%d")
+    today = datetime.now(JST).strftime("%Y.%m.%d")
     market_lines = format_market_lines(data)
     content = f"""---
 layout: default
@@ -153,11 +158,94 @@ layout: default
         f.write(content)
 
 
+# ── RSS フィード生成 ────────────────────────────────────
+
+_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+           "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+
+def _rfc822(dt):
+    return (f"{_DAYS[dt.weekday()]}, {dt.day:02d} {_MONTHS[dt.month-1]} "
+            f"{dt.year} {dt.hour:02d}:{dt.minute:02d}:{dt.second:02d} +0900")
+
+
+def update_rss(title, body):
+    now = datetime.now(JST)
+    data_path = "docs/feed_data.json"
+    entries = []
+    if os.path.exists(data_path):
+        with open(data_path, encoding="utf-8") as f:
+            entries = json.load(f)
+
+    entries.insert(0, {
+        "title": title,
+        "body": body,
+        "date": now.strftime("%Y-%m-%d"),
+        "pubDate": _rfc822(now),
+    })
+    entries = entries[:30]
+
+    with open(data_path, "w", encoding="utf-8") as f:
+        json.dump(entries, f, ensure_ascii=False, indent=2)
+
+    items_xml = "\n".join(
+        f"""  <item>
+    <title>{escape(e['title'])}</title>
+    <link>{SITE_URL}</link>
+    <description>{escape(e['body'][:200])}</description>
+    <pubDate>{e['pubDate']}</pubDate>
+    <guid>{SITE_URL}#{e['date']}</guid>
+  </item>"""
+        for e in entries
+    )
+    rss = f"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>相場日記</title>
+    <link>{SITE_URL}</link>
+    <description>個人投資家の毎朝のつぶやき</description>
+    <language>ja</language>
+{items_xml}
+  </channel>
+</rss>"""
+    with open("docs/feed.xml", "w", encoding="utf-8") as f:
+        f.write(rss)
+
+
+# ── X（Twitter）投稿 ────────────────────────────────────
+
+def post_to_x(title, body):
+    required = ["X_API_KEY", "X_API_SECRET", "X_ACCESS_TOKEN", "X_ACCESS_TOKEN_SECRET"]
+    if not all(os.environ.get(k) for k in required):
+        print("X credentials not set — skipping X post.")
+        return
+
+    import tweepy
+    client = tweepy.Client(
+        consumer_key=os.environ["X_API_KEY"],
+        consumer_secret=os.environ["X_API_SECRET"],
+        access_token=os.environ["X_ACCESS_TOKEN"],
+        access_token_secret=os.environ["X_ACCESS_TOKEN_SECRET"],
+    )
+    # URL は X 側で t.co 短縮後23文字換算
+    url_len = 23
+    max_body = 280 - len(title) - url_len - 4  # 改行×2 + 余裕
+    preview = body[:max_body].rstrip() + ("…" if len(body) > max_body else "")
+    tweet = f"{title}\n\n{preview}\n\n{SITE_URL}"
+    client.create_tweet(text=tweet)
+    print("Posted to X.")
+
+
+# ── メイン ──────────────────────────────────────────────
+
 if __name__ == "__main__":
     data = get_market_data()
     summary = format_market_summary(data)
     title, body = generate_entry(summary)
     write_index(data, title, body)
+    update_rss(title, body)
+    post_to_x(title, body)
     print(summary)
     print(f"\nTitle: {title}")
     print(f"Body:\n{body}")
