@@ -240,6 +240,62 @@ def post_to_x(title, body):
         print(f"X post skipped: {e}")
 
 
+# ── Bluesky 投稿 ────────────────────────────────────────
+
+def post_to_bluesky(title, body):
+    if not all(os.environ.get(k) for k in ["BSKY_HANDLE", "BSKY_APP_PASSWORD"]):
+        print("Bluesky credentials not set — skipping.")
+        return
+    try:
+        import urllib.request, json as _json
+        handle = os.environ["BSKY_HANDLE"]
+        password = os.environ["BSKY_APP_PASSWORD"]
+
+        def api(method, data):
+            req = urllib.request.Request(
+                f"https://bsky.social/xrpc/{method}",
+                data=_json.dumps(data).encode(),
+                headers={"Content-Type": "application/json"},
+            )
+            with urllib.request.urlopen(req) as r:
+                return _json.loads(r.read())
+
+        session = api("com.atproto.server.createSession",
+                      {"identifier": handle, "password": password})
+        token = session["accessJwt"]
+
+        max_body = 300 - len(title) - len(SITE_URL) - 4
+        preview = body[:max_body].rstrip() + ("…" if len(body) > max_body else "")
+        text = f"{title}\n\n{preview}\n\n{SITE_URL}"
+
+        url_start = len(f"{title}\n\n{preview}\n\n".encode("utf-8"))
+        url_end = url_start + len(SITE_URL.encode("utf-8"))
+
+        req = urllib.request.Request(
+            "https://bsky.social/xrpc/com.atproto.repo.createRecord",
+            data=_json.dumps({
+                "repo": session["did"],
+                "collection": "app.bsky.feed.post",
+                "record": {
+                    "$type": "app.bsky.feed.post",
+                    "text": text,
+                    "facets": [{
+                        "index": {"byteStart": url_start, "byteEnd": url_end},
+                        "features": [{"$type": "app.bsky.richtext.facet#link", "uri": SITE_URL}],
+                    }],
+                    "createdAt": datetime.now(JST).isoformat(),
+                },
+            }).encode(),
+            headers={"Content-Type": "application/json",
+                     "Authorization": f"Bearer {token}"},
+        )
+        with urllib.request.urlopen(req):
+            pass
+        print("Posted to Bluesky.")
+    except Exception as e:
+        print(f"Bluesky post skipped: {e}")
+
+
 # ── メイン ──────────────────────────────────────────────
 
 if __name__ == "__main__":
@@ -249,6 +305,7 @@ if __name__ == "__main__":
     write_index(data, title, body)
     update_rss(title, body)
     post_to_x(title, body)
+    post_to_bluesky(title, body)
     print(summary)
     print(f"\nTitle: {title}")
     print(f"Body:\n{body}")
