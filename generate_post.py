@@ -1,6 +1,6 @@
 import yfinance as yf
 import anthropic
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 import os
 
 TICKERS = {
@@ -84,12 +84,14 @@ def format_market_lines(data):
     return "\n".join(lines)
 
 
+JST = timezone(timedelta(hours=9))
+
+
 def write_index(data, title, body):
-    today = datetime.now().strftime("%Y.%m.%d")
+    today = datetime.now(JST).strftime("%Y.%m.%d")
     market_lines = format_market_lines(data)
     content = f"""---
 layout: default
-title: "{title}"
 ---
 
 # {title}

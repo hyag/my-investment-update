@@ -19,11 +19,11 @@ body {
 
 .site-header,
 .site-footer,
-.site-nav {
+.site-nav,
+.page-heading {
   display: none;
 }
 
-/* タイトル：大きく・1回だけ */
 h1 {
   font-size: 1.5rem;
   font-weight: 500;
@@ -33,29 +33,26 @@ h1 {
   border: none;
 }
 
-h2, h3 { display: none; }
-
-/* 本文 */
 p {
   margin: 1.6rem 0;
   letter-spacing: 0.03em;
   text-align: left;
 }
 
-/* 日付 */
 p.date {
   color: #aaa;
   font-size: 0.8rem;
   letter-spacing: 0.08em;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.4rem;
+  margin-top: 0;
 }
 
-/* 市場データ */
 p.market {
   font-size: 0.82rem;
   color: #999;
   letter-spacing: 0.01em;
   line-height: 2;
+  margin-top: 0;
   margin-bottom: 2rem;
 }
 
