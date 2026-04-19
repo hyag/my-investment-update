@@ -33,11 +33,7 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: python update.py
 
-      - name: Commit and push
-        run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add docs/index.md
-          git diff --cached --quiet || git commit -m "chore: daily update $(date +'%Y-%m-%d')"
-          git pull --rebase origin main
-          git push
+      - uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: daily update"
+          file_pattern: docs/index.md
