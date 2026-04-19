@@ -5,6 +5,10 @@ on:
     - cron: "0 23 * * *"  # UTC 23:00 = JST 08:00
   workflow_dispatch:        # 手動実行も可能
 
+concurrency:
+  group: daily-update
+  cancel-in-progress: true
+
 jobs:
   update:
     runs-on: ubuntu-latest
