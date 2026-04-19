@@ -76,30 +76,26 @@ def generate_entry(market_summary):
     return title, body
 
 
-def format_market_line(data):
-    parts = []
+def format_market_lines(data):
+    lines = []
     for name, v in data.items():
         sign = "+" if v["pct"] >= 0 else ""
-        parts.append(f"{name} {v['price']:,.0f}（{sign}{v['pct']:.1f}%）")
-    return "　".join(parts)
+        lines.append(f"{name}  {v['price']:,.2f}  {sign}{v['pct']:.1f}%")
+    return "\n".join(lines)
 
 
 def write_index(data, title, body):
-    today = datetime.now().strftime("%Y年%m月%d日")
-    market_line = format_market_line(data)
+    today = datetime.now().strftime("%Y.%m.%d")
+    market_lines = format_market_lines(data)
     content = f"""# {title}
 
-{today}
+*{today}*
 
-{market_line}
-
----
+```
+{market_lines}
+```
 
 {body}
-
----
-
-*毎朝 8:00 JST 自動更新*
 """
     os.makedirs("docs", exist_ok=True)
     with open("docs/index.md", "w", encoding="utf-8") as f:
