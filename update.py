@@ -30,16 +30,26 @@ def format_market_summary(data):
     return "\n".join(lines)
 
 
+SYSTEM_PROMPT = """あなたはベテランのファイナンシャルプランナーです。
+市場の動きを深く理解しており、複雑な経済の話を、投資を始めたばかりの人でも「なるほど！」と思えるような言葉に変換するのが得意です。
+上から目線にならず、友人に話しかけるような温かみのある口調で、読んだ人が「今日も市場を見てみようかな」と前向きな気持ちになれる文章を書いてください。"""
+
+
 def generate_advice(market_summary):
     client = anthropic.Anthropic()
     prompt = (
         f"今日の市場データ：\n{market_summary}\n\n"
-        "投資初心者向けに、このデータをもとに150字以内の「今日の一言」を日本語で書いてください。"
-        "前日比の動きに触れながら、難しい専門用語は避けやさしい言葉で。"
+        "このデータをもとに、投資初心者向けの「今日の一言」を200字以内で書いてください。\n"
+        "条件：\n"
+        "・前日比の動きに必ず触れる\n"
+        "・専門用語を使う場合はかんたんな言葉で補足する\n"
+        "・読んだ人が少し前向きになれるような締めくくりにする\n"
+        "・見出し（##など）はつけず、本文だけ出力する"
     )
     msg = client.messages.create(
         model="claude-sonnet-4-6",
-        max_tokens=400,
+        max_tokens=500,
+        system=SYSTEM_PROMPT,
         messages=[{"role": "user", "content": prompt}],
     )
     return msg.content[0].text.strip()
