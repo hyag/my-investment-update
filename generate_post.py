@@ -121,19 +121,22 @@ def generate_entry(market_summary):
     return title, body
 
 
+JST = timezone(timedelta(hours=9))
+
+
 def format_market_lines(data):
     lines = []
     for name, v in data.items():
         sign = "+" if v["pct"] >= 0 else ""
-        lines.append(f"{name}  {v['price']:,.2f}  {sign}{v['pct']:.1f}%")
+        lines.append(f"{name}  {v['price']:,.2f}  前日比{sign}{v['pct']:.1f}%")
     return "\n".join(lines)
 
 
-JST = timezone(timedelta(hours=9))
-
-
 def write_index(data, title, body):
-    today = datetime.now(JST).strftime("%Y.%m.%d")
+    now = datetime.now(JST)
+    today = now.strftime("%Y.%m.%d")
+    days_back = 3 if now.weekday() == 0 else 1
+    prev_date = (now - timedelta(days=days_back)).strftime("%m/%d")
     market_lines = format_market_lines(data)
     content = f"""---
 layout: default
@@ -141,7 +144,7 @@ layout: default
 
 # {title}
 
-<p class="date">{today}</p>
+<p class="date">{today} 配信 ／ {prev_date} 終値</p>
 
 <p class="market">{market_lines.replace(chr(10), '<br>')}</p>
 
