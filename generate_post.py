@@ -72,7 +72,7 @@ def format_market_lines(data):
 # ── 週末ニュース（月曜のみ） ────────────────────────────
 
 def get_weekend_news():
-    cutoff = int((datetime.now(JST) - timedelta(days=2)).timestamp())
+    cutoff = int((datetime.now(JST) - timedelta(days=3)).timestamp())
     headlines = []
     for symbol in ["^GSPC", "^NDX", "JPY=X"]:
         try:
