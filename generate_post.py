@@ -142,7 +142,9 @@ def generate_entry(market_summary):
 # ── index.md 生成 ───────────────────────────────────────
 
 def write_index(data, title, body):
-    today = datetime.now(JST).strftime("%Y.%m.%d")
+    now = datetime.now(JST)
+    today = now.strftime("%Y.%m.%d")
+    time_str = now.strftime("%H:%M")
     market_lines = format_market_lines(data)
     content = f"""---
 layout: default
@@ -150,7 +152,7 @@ layout: default
 
 # {title}
 
-<p class="date">{today}　8:00配信</p>
+<p class="date">{today}　{time_str}配信</p>
 
 <p class="market">{market_lines.replace(chr(10), '<br>')}</p>
 
