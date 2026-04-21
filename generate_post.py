@@ -9,6 +9,7 @@ import yfinance as yf
 JST = timezone(timedelta(hours=9))
 SITE_URL = "https://hyag.github.io/my-investment-update/"
 PING_URL = "https://ping.blogmura.com/xmlrpc/1vi5lsawn3la/"
+PING_URL2 = "https://blog.with2.net/ping.php/2140054/1776737420"
 
 TICKERS = {
     "USD/JPY":   "JPY=X",
@@ -326,7 +327,7 @@ def post_to_bluesky(title, body, tags=""):
 
 def ping_blogmura(title):
     try:
-        import urllib.request, xml.etree.ElementTree as ET
+        import urllib.request
         body = f"""<?xml version="1.0"?>
 <methodCall>
   <methodName>weblogUpdates.ping</methodName>
@@ -335,13 +336,14 @@ def ping_blogmura(title):
     <param><value><string>{SITE_URL}</string></value></param>
   </params>
 </methodCall>"""
-        req = urllib.request.Request(
-            PING_URL,
-            data=body.encode("utf-8"),
-            headers={"Content-Type": "text/xml"},
-        )
-        with urllib.request.urlopen(req, timeout=10) as r:
-            print(f"Ping sent: {r.status}")
+        for url in [PING_URL, PING_URL2]:
+            req = urllib.request.Request(
+                url,
+                data=body.encode("utf-8"),
+                headers={"Content-Type": "text/xml"},
+            )
+            with urllib.request.urlopen(req, timeout=10) as r:
+                print(f"Ping sent to {url}: {r.status}")
     except Exception as e:
         print(f"Ping skipped: {e}")
 
