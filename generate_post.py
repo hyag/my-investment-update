@@ -73,8 +73,8 @@ def format_market_lines(data):
 
 # ── 週末ニュース（月曜のみ） ────────────────────────────
 
-def get_weekend_news():
-    cutoff = int((datetime.now(JST) - timedelta(days=3)).timestamp())
+def get_news(days=1, limit=5):
+    cutoff = int((datetime.now(JST) - timedelta(days=days)).timestamp())
     headlines = []
     for symbol in ["^GSPC", "^NDX", "JPY=X"]:
         try:
@@ -90,7 +90,7 @@ def get_weekend_news():
         if h not in seen:
             seen.add(h)
             unique.append(h)
-    return unique[:5]
+    return unique[:limit]
 
 
 # ── Claude API ──────────────────────────────────────────
@@ -100,7 +100,7 @@ def generate_entry(market_summary):
     weekday = datetime.now(JST).weekday()
 
     if weekday == 0:
-        news = get_weekend_news()
+        news = get_news(days=3, limit=5)
         news_section = (
             "【週末のニュース見出し】\n" + "\n".join(f"・{h}" for h in news)
             if news else ""
@@ -111,8 +111,13 @@ def generate_entry(market_summary):
         )
         market_block = f"市場終値データ：\n{market_summary}\n\n{news_section}\n\n{timing_note}"
     else:
-        timing_note = "昨日の市場終値を見ながら、今日の相場を前に感じたことを書く朝の一言。"
-        market_block = f"市場終値データ：\n{market_summary}\n\n{timing_note}"
+        news = get_news(days=1, limit=5)
+        news_section = (
+            "【直近のニュース見出し】\n" + "\n".join(f"・{h}" for h in news)
+            if news else ""
+        )
+        timing_note = "昨日の市場終値を見ながら、今日の相場を前に感じたことを書く朝の一言。ニュースがあれば地政学リスクや経済の背景として参考にしてよいが、ニュースを要約するのではなく、あくまで市場の動きへの感想として自然に織り込む。"
+        market_block = f"市場終値データ：\n{market_summary}\n\n{news_section}\n\n{timing_note}"
 
     prompt = (
         f"{market_block}\n\n"
