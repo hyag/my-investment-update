@@ -18,6 +18,25 @@ TICKERS = {
     "S&P500":    "^GSPC",
 }
 
+# VIXは別管理（%変化より水準が重要なため）
+_VIX_SYMBOL = "^VIX"
+
+
+def _vix_label(vix: float) -> str:
+    if vix >= 30: return "高（市場パニック圏）"
+    if vix >= 20: return "やや高（警戒圏）"
+    if vix >= 15: return "通常圏"
+    return "低（安心圏）"
+
+
+def get_vix() -> float | None:
+    """VIX現在値を取得する"""
+    try:
+        hist = yf.Ticker(_VIX_SYMBOL).history(period="2d")["Close"]
+        return float(hist.iloc[-1]) if not hist.empty else None
+    except Exception:
+        return None
+
 SYSTEM_PROMPT = """スマホのメモ帳を気ままに公開してる、投資歴数年の普通の個人投資家として書いてください。
 
 配信タイミングは毎朝8時。昨日の市場終値を見ながら、今日の相場を前に感じたことを書く朝の一言です。
@@ -73,16 +92,44 @@ def format_market_lines(data):
 
 # ── 週末ニュース（月曜のみ） ────────────────────────────
 
-def get_news(days=1, limit=5):
-    cutoff = int((datetime.now(JST) - timedelta(days=days)).timestamp())
+def _parse_yf_news_item(item: dict) -> tuple[str, datetime | None]:
+    """
+    yfinanceニュースアイテムからタイトルと公開日時を取得する。
+    旧API: item.providerPublishTime（Unix秒）
+    新API: item.content.pubDate（ISO文字列）
+    """
+    content = item.get("content") or {}
+    title = content.get("title") or item.get("title", "")
+
+    pub_dt: datetime | None = None
+    pub_date_str = content.get("pubDate", "")
+    if pub_date_str:
+        try:
+            pub_dt = datetime.fromisoformat(pub_date_str.replace("Z", "+00:00"))
+        except Exception:
+            pass
+    if pub_dt is None:
+        pub_ts = item.get("providerPublishTime") or 0
+        if pub_ts:
+            pub_dt = datetime.fromtimestamp(pub_ts, tz=timezone.utc)
+
+    return title, pub_dt
+
+
+def get_news(days=1, limit=8):
+    """yfinanceから複数銘柄のニュース見出しを取得して重複排除する"""
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
     headlines = []
-    for symbol in ["^GSPC", "^NDX", "JPY=X"]:
+    # JPY=X/USDJPY=X: 為替ニュース / ^GSPC,^NDX: 株式 / ^DXY: ドル指数
+    for symbol in ["JPY=X", "USDJPY=X", "^GSPC", "^NDX", "^DXY"]:
         try:
             for item in (yf.Ticker(symbol).news or []):
-                if item.get("providerPublishTime", 0) >= cutoff:
-                    title = (item.get("content") or {}).get("title") or item.get("title", "")
-                    if title:
-                        headlines.append(title)
+                title, pub_dt = _parse_yf_news_item(item)
+                if not title:
+                    continue
+                if pub_dt is not None and pub_dt < cutoff:
+                    continue
+                headlines.append(title)
         except Exception:
             pass
     seen, unique = set(), []
@@ -95,12 +142,17 @@ def get_news(days=1, limit=5):
 
 # ── Claude API ──────────────────────────────────────────
 
-def generate_entry(market_summary):
+def generate_entry(market_summary, vix: float | None = None):
     client = anthropic.Anthropic()
     weekday = datetime.now(JST).weekday()
 
+    # VIXセクション（取得できた場合のみ追加）
+    vix_section = ""
+    if vix is not None:
+        vix_section = f"\n【恐怖指数（VIX）】{vix:.1f} → {_vix_label(vix)}"
+
     if weekday == 0:
-        news = get_news(days=3, limit=5)
+        news = get_news(days=3, limit=8)
         news_section = (
             "【週末のニュース見出し】\n" + "\n".join(f"・{h}" for h in news)
             if news else ""
@@ -109,22 +161,37 @@ def generate_entry(market_summary):
             "今日は月曜日。先週末（金曜）の終値と、もし週末ニュースがあればそれも踏まえて、"
             "週明けの相場を前にした朝の一言を書く。「さて今週はどうなるか」のような週明けならではのニュアンスで。"
         )
-        market_block = f"市場終値データ：\n{market_summary}\n\n{news_section}\n\n{timing_note}"
+        market_block = (
+            f"市場終値データ：\n{market_summary}{vix_section}\n\n"
+            f"{news_section}\n\n{timing_note}"
+        )
     else:
-        news = get_news(days=1, limit=5)
+        news = get_news(days=1, limit=8)
         news_section = (
             "【直近のニュース見出し】\n" + "\n".join(f"・{h}" for h in news)
             if news else ""
         )
-        timing_note = "昨日の市場終値を見ながら、今日の相場を前に感じたことを書く朝の一言。ニュースがあれば地政学リスクや経済の背景として参考にしてよいが、ニュースを要約するのではなく、あくまで市場の動きへの感想として自然に織り込む。"
-        market_block = f"市場終値データ：\n{market_summary}\n\n{news_section}\n\n{timing_note}"
+        timing_note = (
+            "昨日の市場終値を見ながら、今日の相場を前に感じたことを書く朝の一言。"
+            "VIXが高い時はリスクオフの空気感を自然に反映させてよい。"
+            "ニュースがあれば地政学リスクや経済の背景として参考にしてよいが、"
+            "ニュースを要約するのではなく、あくまで市場の動きへの感想として自然に織り込む。"
+        )
+        market_block = (
+            f"市場終値データ：\n{market_summary}{vix_section}\n\n"
+            f"{news_section}\n\n{timing_note}"
+        )
 
     prompt = (
         f"{market_block}\n\n"
         "以下の形式だけで出力してください。余計な説明は不要です。\n\n"
         "TITLE: （記事の内容を表す3〜10文字。日記っぽいキャッチーな一言。例：『ドル円、粘るなぁ』『週明け様子見』）\n"
         "TAGS: （日本語ハッシュタグを3〜5個。投資クラスタへの露骨な訴求は避け、日常・記録・経済に興味ある人に自然に届くトーンで。例：#朝の記録 #経済メモ #ドル円 #相場日記 #マーケット）\n"
-        "BODY:\n（150字前後の本文。見出し・箇条書きなし。メモ帳に書いた独り言のような文体で。話題や気持ちの切れ目で自然に改行を入れる）"
+        "BODY:\n（160〜180字前後の本文。見出し・箇条書きなし。メモ帳に書いた独り言のような文体で。話題や気持ちの切れ目で自然に改行を入れる。\n\n"
+        "本文の最後は空行を1つ入れてから、読者を穏やかに送り出す一文で締めること。\n"
+        "トーンは相場の状況に合わせて自然に変える。毎回同じ表現は使わない。\n"
+        "例：「今日も一喜一憂せず、いってらっしゃい。」「焦らず、今日も良い一日を。」「無理せず、相場と付き合っていこう。」\n"
+        "投資を煽らない。損切りを急かさない。キャラクター設定（独り言の文体）を崩さない）"
     )
     msg = client.messages.create(
         model="claude-sonnet-4-6",
@@ -148,11 +215,13 @@ def generate_entry(market_summary):
 
 # ── index.md 生成 ───────────────────────────────────────
 
-def write_index(data, title, body):
+def write_index(data, title, body, vix: float | None = None):
     now = datetime.now(JST)
     today = now.strftime("%Y.%m.%d")
     time_str = now.strftime("%H:%M")
     market_lines = format_market_lines(data)
+    if vix is not None:
+        market_lines += f"\nVIX  {vix:.1f}  {_vix_label(vix)}"
     content = f"""---
 layout: default
 ---
@@ -356,15 +425,18 @@ def ping_blogmura(title):
 # ── メイン ──────────────────────────────────────────────
 
 if __name__ == "__main__":
-    data = get_market_data()
+    data    = get_market_data()
+    vix     = get_vix()
     summary = format_market_summary(data)
-    title, body, tags = generate_entry(summary)
-    write_index(data, title, body)
+    title, body, tags = generate_entry(summary, vix=vix)
+    write_index(data, title, body, vix=vix)
     update_rss(title, body)
     post_to_x(title, body)
     post_to_bluesky(title, body, tags)
     ping_blogmura(title)
     print(summary)
+    if vix is not None:
+        print(f"VIX: {vix:.1f} ({_vix_label(vix)})")
     print(f"\nTitle: {title}")
     print(f"Tags: {tags}")
     print(f"Body:\n{body}")
