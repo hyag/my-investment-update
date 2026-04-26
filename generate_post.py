@@ -1,5 +1,6 @@
 import json
 import os
+import urllib.request
 from datetime import datetime, timezone, timedelta
 from xml.sax.saxutils import escape
 
@@ -90,6 +91,54 @@ def format_market_lines(data):
     return "\n".join(lines)
 
 
+# ── FX急変サマリー取得 ──────────────────────────────────
+
+_SPIKE_SUMMARY_URL = (
+    "https://raw.githubusercontent.com/hyag/fx_alert_bot/main/daily_summary.json"
+)
+_OUTCOME_JA = {"continued": "その後継続", "reversed": "半値戻し", "flat": "横ばい"}
+
+
+def get_fx_spikes() -> str:
+    """
+    前日の USD/JPY 急変サマリーを fx_alert_bot リポジトリから取得し、
+    プロンプト挿入用の文字列を返す。取得失敗や前日データなければ空文字。
+    """
+    try:
+        req = urllib.request.Request(
+            _SPIKE_SUMMARY_URL,
+            headers={"Cache-Control": "no-cache"},
+        )
+        with urllib.request.urlopen(req, timeout=10) as r:
+            data = json.loads(r.read())
+
+        yesterday = (datetime.now(JST) - timedelta(days=1)).strftime("%Y-%m-%d")
+        if data.get("date") != yesterday:
+            return ""
+
+        spikes = data.get("spikes", [])
+        if not spikes:
+            return ""
+
+        lines = []
+        for s in spikes:
+            direction = "急落" if s.get("direction") == "down" else "急騰"
+            pips      = s.get("magnitude_pips", 0)
+            cause     = (s.get("cause") or "原因不明")[:80]
+            conf      = s.get("confidence", "")
+            outcome   = _OUTCOME_JA.get(s.get("outcome", ""), "")
+            time_jst  = s.get("time_jst", "")
+            outcome_str = f" → 30分後:{outcome}" if outcome else ""
+            lines.append(
+                f"・{time_jst} {direction}{pips:.0f}pips"
+                f"（{cause}）[信頼度:{conf}]{outcome_str}"
+            )
+
+        return "【昨日のUSD/JPY急変アラート】\n" + "\n".join(lines)
+    except Exception:
+        return ""
+
+
 # ── 週末ニュース（月曜のみ） ────────────────────────────
 
 def _parse_yf_news_item(item: dict) -> tuple[str, datetime | None]:
@@ -151,6 +200,9 @@ def generate_entry(market_summary, vix: float | None = None):
     if vix is not None:
         vix_section = f"\n【恐怖指数（VIX）】{vix:.1f} → {_vix_label(vix)}"
 
+    # 前日の USD/JPY 急変サマリー（fx_alert_bot から取得）
+    spike_section = get_fx_spikes()
+
     if weekday == 0:
         news = get_news(days=3, limit=8)
         news_section = (
@@ -163,7 +215,8 @@ def generate_entry(market_summary, vix: float | None = None):
         )
         market_block = (
             f"市場終値データ：\n{market_summary}{vix_section}\n\n"
-            f"{news_section}\n\n{timing_note}"
+            + (f"{spike_section}\n\n" if spike_section else "")
+            + f"{news_section}\n\n{timing_note}"
         )
     else:
         news = get_news(days=1, limit=8)
@@ -174,12 +227,14 @@ def generate_entry(market_summary, vix: float | None = None):
         timing_note = (
             "昨日の市場終値を見ながら、今日の相場を前に感じたことを書く朝の一言。"
             "VIXが高い時はリスクオフの空気感を自然に反映させてよい。"
+            "急変アラートがあれば、その動きを踏まえた感想を自然に織り込んでよい。"
             "ニュースがあれば地政学リスクや経済の背景として参考にしてよいが、"
             "ニュースを要約するのではなく、あくまで市場の動きへの感想として自然に織り込む。"
         )
         market_block = (
             f"市場終値データ：\n{market_summary}{vix_section}\n\n"
-            f"{news_section}\n\n{timing_note}"
+            + (f"{spike_section}\n\n" if spike_section else "")
+            + f"{news_section}\n\n{timing_note}"
         )
 
     prompt = (
