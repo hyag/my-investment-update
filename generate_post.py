@@ -314,10 +314,13 @@ def update_rss(title, body):
         with open(data_path, encoding="utf-8") as f:
             entries = json.load(f)
 
+    today = now.strftime("%Y-%m-%d")
+    # 同日エントリが既にあれば上書き（重複防止）
+    entries = [e for e in entries if e.get("date") != today]
     entries.insert(0, {
         "title": title,
         "body": body,
-        "date": now.strftime("%Y-%m-%d"),
+        "date": today,
         "pubDate": _rfc822(now),
     })
     entries = entries[:30]
@@ -328,10 +331,10 @@ def update_rss(title, body):
     items_xml = "\n".join(
         f"""  <item>
     <title>{escape(e['title'])}</title>
-    <link>{SITE_URL}</link>
+    <link>{SITE_URL}#{e['date']}</link>
     <description>{escape(e['body'][:200])}</description>
     <pubDate>{e['pubDate']}</pubDate>
-    <guid>{SITE_URL}#{e['date']}</guid>
+    <guid isPermaLink="false">{SITE_URL}#{e['date']}</guid>
   </item>"""
         for e in entries
     )
