@@ -46,3 +46,6 @@ jobs:
         with:
           commit_message: "chore: daily update"
           file_pattern: docs/index.md docs/feed.xml docs/feed_data.json
+
+      - name: Ping blog directories
+        run: python -c "from generate_post import ping_blogmura; ping_blogmura('')"

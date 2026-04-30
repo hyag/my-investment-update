@@ -488,7 +488,6 @@ if __name__ == "__main__":
     update_rss(title, body)
     post_to_x(title, body)
     post_to_bluesky(title, body, tags)
-    ping_blogmura(title)
     print(summary)
     if vix is not None:
         print(f"VIX: {vix:.1f} ({_vix_label(vix)})")
