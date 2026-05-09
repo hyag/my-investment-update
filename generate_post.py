@@ -483,6 +483,12 @@ def ping_blogmura(title):
 # ── メイン ──────────────────────────────────────────────
 
 if __name__ == "__main__":
+    # 土日（JST）は配信しない
+    _now_jst = datetime.now(JST)
+    if _now_jst.weekday() >= 5:  # 5=土曜, 6=日曜
+        print(f"土日のためスキップ ({_now_jst.strftime('%Y-%m-%d %a JST')})")
+        raise SystemExit(0)
+
     data    = get_market_data()
     vix     = get_vix()
     summary = format_market_summary(data)
